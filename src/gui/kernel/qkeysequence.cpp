@@ -819,6 +819,7 @@ QKeySequence::QKeySequence(const QString &key, QKeySequence::SequenceFormat form
     assign(key, format);
 }
 
+Q_STATIC_ASSERT_X(QKeySequencePrivate::MaxKeyCount == 4, "Change docs and ctor impl below");
 /*!
     Constructs a key sequence with up to 4 keys \a k1, \a k2,
     \a k3 and \a k4.
@@ -877,26 +878,19 @@ QKeySequence::~QKeySequence()
 
 void QKeySequence::setKey(int key, int index)
 {
-    Q_ASSERT_X(index >= 0 && index < 4, "QKeySequence::setKey", "index out of range");
+    Q_ASSERT_X(index >= 0 && index < QKeySequencePrivate::MaxKeyCount, "QKeySequence::setKey", "index out of range");
     qAtomicDetach(d);
     d->key[index] = key;
 }
 
+Q_STATIC_ASSERT_X(QKeySequencePrivate::MaxKeyCount == 4, "Change docs below");
 /*!
     Returns the number of keys in the key sequence.
     The maximum is 4.
  */
 int QKeySequence::count() const
 {
-    if (!d->key[0])
-        return 0;
-    if (!d->key[1])
-        return 1;
-    if (!d->key[2])
-        return 2;
-    if (!d->key[3])
-        return 3;
-    return 4;
+    return int(std::distance(d->key, std::find(d->key, d->key + QKeySequencePrivate::MaxKeyCount, 0)));
 }
 
 
@@ -988,8 +982,8 @@ int QKeySequence::assign(const QString &ks, QKeySequence::SequenceFormat format)
     int p = 0, diff = 0;
 
     // Run through the whole string, but stop
-    // if we have 4 keys before the end.
-    while (keyseq.length() && n < 4) {
+    // if we have MaxKeyCount keys before the end.
+    while (keyseq.length() && n < QKeySequencePrivate::MaxKeyCount) {
         // We MUST use something to separate each sequence, and space
         // does not cut it, since some of the key names have space
         // in them.. (Let's hope no one translate with a comma in it:)
@@ -1023,9 +1017,10 @@ struct QModifKeyName {
     int qt_key;
     QString name;
 };
+Q_DECLARE_TYPEINFO(QModifKeyName, Q_MOVABLE_TYPE);
 
-Q_GLOBAL_STATIC(QList<QModifKeyName>, globalModifs)
-Q_GLOBAL_STATIC(QList<QModifKeyName>, globalPortableModifs)
+Q_GLOBAL_STATIC(QVector<QModifKeyName>, globalModifs)
+Q_GLOBAL_STATIC(QVector<QModifKeyName>, globalPortableModifs)
 
 /*!
   Constructs a single key from the string \a str.
@@ -1041,7 +1036,7 @@ int QKeySequencePrivate::decodeString(const QString &str, QKeySequence::Sequence
     QString accel = str.toLower();
     bool nativeText = (format == QKeySequence::NativeText);
 
-    QList<QModifKeyName> *gmodifs;
+    QVector<QModifKeyName> *gmodifs;
     if (nativeText) {
         gmodifs = globalModifs();
         if (gmodifs->isEmpty()) {
@@ -1077,7 +1072,7 @@ int QKeySequencePrivate::decodeString(const QString &str, QKeySequence::Sequence
     if (!gmodifs) return ret;
 
 
-    QList<QModifKeyName> modifs;
+    QVector<QModifKeyName> modifs;
     if (nativeText) {
         modifs << QModifKeyName(Qt::CTRL, QCoreApplication::translate("QShortcut", "Ctrl").toLower().append(QLatin1Char('+')))
                << QModifKeyName(Qt::SHIFT, QCoreApplication::translate("QShortcut", "Shift").toLower().append(QLatin1Char('+')))
@@ -1367,7 +1362,7 @@ QKeySequence::operator QVariant() const
  */
 int QKeySequence::operator[](uint index) const
 {
-    Q_ASSERT_X(index < 4, "QKeySequence::operator[]", "index out of range");
+    Q_ASSERT_X(index < QKeySequencePrivate::MaxKeyCount, "QKeySequence::operator[]", "index out of range");
     return d->key[index];
 }
 
@@ -1435,10 +1430,8 @@ uint qHash(const QKeySequence &key, uint seed) Q_DECL_NOTHROW
 */
 bool QKeySequence::operator< (const QKeySequence &other) const
 {
-    for (int i = 0; i < 4; ++i)
-        if (d->key[i] != other.d->key[i])
-            return d->key[i] < other.d->key[i];
-    return false;
+    return std::lexicographical_compare(d->key, d->key + QKeySequencePrivate::MaxKeyCount,
+                                        other.d->key, other.d->key + QKeySequencePrivate::MaxKeyCount);
 }
 
 /*!
@@ -1599,11 +1592,19 @@ QDataStream &operator<<(QDataStream &s, const QKeySequence &keysequence)
 */
 QDataStream &operator>>(QDataStream &s, QKeySequence &keysequence)
 {
+    const quint32 MaxKeys = QKeySequencePrivate::MaxKeyCount;
+    quint32 c;
+    s >> c;
+    quint32 keys[MaxKeys] = {0};
+    for (uint i = 0; i < qMin(c, MaxKeys); ++i) {
+        if (s.atEnd()) {
+            qWarning("Premature EOF while reading QKeySequence");
+            return s;
+        }
+        s >> keys[i];
+    }
     qAtomicDetach(keysequence.d);
-    QList<quint32> list;
-    s >> list;
-    for (int i = 0; i < 4; ++i)
-        keysequence.d->key[i] = list.value(i);
+    std::copy(keys, keys + MaxKeys, keysequence.d->key);
     return s;
 }
 

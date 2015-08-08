@@ -3,7 +3,7 @@
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
-** This file is part of the plugins of the Qt Toolkit.
+** This file is part of the qmake spec of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
@@ -31,41 +31,5 @@
 **
 ****************************************************************************/
 
-#include  "qwindowsscaling.h"
-#include  "qwindowsscreen.h"
+#include "../common/wince/qplatformdefs.h"
 
-#include <QtCore/QDebug>
-#include <QtCore/QCoreApplication>
-
-QT_BEGIN_NAMESPACE
-
-/*!
-    \class QWindowsScaling
-    \brief Windows scaling utilities
-
-    \internal
-    \ingroup qt-lighthouse-win
-*/
-
-int QWindowsScaling::m_factor = 1;
-
-static const char devicePixelRatioEnvVar[] = "QT_DEVICE_PIXEL_RATIO";
-
-// Suggest a scale factor by checking monitor sizes.
-int QWindowsScaling::determineUiScaleFactor()
-{
-    if (!qEnvironmentVariableIsSet(devicePixelRatioEnvVar))
-        return 1;
-    const QByteArray envDevicePixelRatioEnv = qgetenv(devicePixelRatioEnvVar);
-    // Auto: Suggest a scale factor by checking monitor resolution.
-    if (envDevicePixelRatioEnv == "auto") {
-        const int maxResolution = QWindowsScreen::maxMonitorHorizResolution();
-        return maxResolution > 180 ? maxResolution / 96 : 1;
-    }
-    // Get factor from environment
-    bool ok = false;
-    const int envFactor = envDevicePixelRatioEnv.toInt(&ok);
-    return ok && envFactor > 0 ? envFactor : 1;
-}
-
-QT_END_NAMESPACE

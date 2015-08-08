@@ -44,6 +44,7 @@
 #include <QtCore/qnamespace.h>
 
 #include <string>
+#include <iterator>
 
 #if defined(Q_OS_ANDROID)
 // std::wstring is disabled on android's glibc, as bionic lacks certain features
@@ -715,14 +716,22 @@ public:
     typedef const QChar *const_iterator;
     typedef iterator Iterator;
     typedef const_iterator ConstIterator;
-    iterator begin();
-    const_iterator begin() const;
-    const_iterator cbegin() const;
-    const_iterator constBegin() const;
-    iterator end();
-    const_iterator end() const;
-    const_iterator cend() const;
-    const_iterator constEnd() const;
+    typedef std::reverse_iterator<iterator> reverse_iterator;
+    typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
+    inline iterator begin();
+    inline const_iterator begin() const;
+    inline const_iterator cbegin() const;
+    inline const_iterator constBegin() const;
+    inline iterator end();
+    inline const_iterator end() const;
+    inline const_iterator cend() const;
+    inline const_iterator constEnd() const;
+    reverse_iterator rbegin() { return reverse_iterator(end()); }
+    reverse_iterator rend() { return reverse_iterator(begin()); }
+    const_reverse_iterator rbegin() const { return const_reverse_iterator(end()); }
+    const_reverse_iterator rend() const { return const_reverse_iterator(begin()); }
+    const_reverse_iterator crbegin() const { return const_reverse_iterator(end()); }
+    const_reverse_iterator crend() const { return const_reverse_iterator(begin()); }
 
     // STL compatibility
     typedef int size_type;
@@ -1354,23 +1363,27 @@ public:
     inline QStringRef(const QString *string, int position, int size);
     inline QStringRef(const QString *string);
 
-    // ### Qt 6: remove this copy constructor, the implicit one is fine
-    inline QStringRef(const QStringRef &other)
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+    // ### Qt 6: remove all of these, the implicit ones are fine
+    QStringRef(const QStringRef &other) Q_DECL_NOTHROW
         :m_string(other.m_string), m_position(other.m_position), m_size(other.m_size)
         {}
-
-    // ### Qt 6: remove this destructor, the implicit one is fine
+#ifdef Q_COMPILER_RVALUE_REFS
+    QStringRef(QStringRef &&other) Q_DECL_NOTHROW : m_string(other.m_string), m_position(other.m_position), m_size(other.m_size) {}
+    QStringRef &operator=(QStringRef &&other) Q_DECL_NOTHROW { return *this = other; }
+#endif
+    QStringRef &operator=(const QStringRef &other) Q_DECL_NOTHROW {
+        m_string = other.m_string; m_position = other.m_position;
+        m_size = other.m_size; return *this;
+    }
     inline ~QStringRef(){}
+#endif // Qt < 6.0.0
+
     inline const QString *string() const { return m_string; }
     inline int position() const { return m_position; }
     inline int size() const { return m_size; }
     inline int count() const { return m_size; }
     inline int length() const { return m_size; }
-
-    inline QStringRef &operator=(const QStringRef &other) {
-        m_string = other.m_string; m_position = other.m_position;
-        m_size = other.m_size; return *this;
-    }
 
     int indexOf(const QString &str, int from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
     int indexOf(QChar ch, int from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;

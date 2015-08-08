@@ -3,7 +3,7 @@
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
-** This file is part of the test suite of the Qt Toolkit.
+** This file is part of the config.tests of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
@@ -30,17 +30,15 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-#include <QApplication>
-#include <stdio.h>
 
-int main(int argc, char *argv[])
+#include <dwrite.h>
+#include <d2d1.h>
+
+int main(int, char**)
 {
-    QApplication app(argc, argv);
-    if (argc > 1)
-        fprintf(stderr, "%s", argv[1]);
-    else
-        fprintf(stderr, "Failed");
-    fflush(stderr);
+    IDWriteFactory *factory = 0;
+    DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
+                        __uuidof(IDWriteFactory),
+                        reinterpret_cast<IUnknown **>(&factory));
     return 0;
 }
-

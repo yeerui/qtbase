@@ -1,9 +1,9 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2015 Intel Corporation.
 ** Contact: http://www.qt.io/licensing/
 **
-** This file is part of the plugins of the Qt Toolkit.
+** This file is part of the configuration module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
@@ -31,49 +31,19 @@
 **
 ****************************************************************************/
 
-#ifndef QEGLPLATFORMSCREEN_H
-#define QEGLPLATFORMSCREEN_H
+#define _GNU_SOURCE 1
 
-//
-//  W A R N I N G
-//  -------------
-//
-// This file is not part of the Qt API.  It exists purely as an
-// implementation detail.  This header file may change from version to
-// version without notice, or even be removed.
-//
-// We mean it.
-//
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <fcntl.h>
+#include <unistd.h>
 
-#include <QtCore/QList>
-#include <QtCore/QPoint>
-#include <QtCore/qtextstream.h>
-#include <qpa/qplatformscreen.h>
-#include <EGL/egl.h>
-
-QT_BEGIN_NAMESPACE
-
-class QOpenGLContext;
-class QWindow;
-class QEGLPlatformWindow;
-
-class QEGLPlatformScreen : public QPlatformScreen
+int main()
 {
-public:
-    QEGLPlatformScreen(EGLDisplay dpy);
-    ~QEGLPlatformScreen();
-
-    EGLDisplay display() const { return m_dpy; }
-
-    void handleCursorMove(const QPoint &pos);
-
-    QPixmap grabWindow(WId wid, int x, int y, int width, int height) const Q_DECL_OVERRIDE;
-
-private:
-    EGLDisplay m_dpy;
-    QWindow *m_pointerWindow;
-};
-
-QT_END_NAMESPACE
-
-#endif // QEGLPLATFORMSCREEN_H
+    int pipes[2];
+    (void) pipe2(pipes, O_CLOEXEC | O_NONBLOCK);
+    (void) fcntl(0, F_DUPFD_CLOEXEC, 0);
+    (void) dup3(0, 3, O_CLOEXEC);
+    (void) accept4(0, 0, 0, SOCK_CLOEXEC | SOCK_NONBLOCK);
+    return 0;
+}

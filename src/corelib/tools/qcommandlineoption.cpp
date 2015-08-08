@@ -250,25 +250,28 @@ namespace {
         typedef bool result_type;
         typedef QString argument_type;
 
+        Q_NEVER_INLINE
         result_type operator()(const QString &name) const Q_DECL_NOEXCEPT
         {
-            if (name.isEmpty()) {
-                qWarning("QCommandLineOption: Option names cannot be empty");
-                return true;
-            } else {
-                const QChar c = name.at(0);
-                if (c == QLatin1Char('-')) {
-                    qWarning("QCommandLineOption: Option names cannot start with a '-'");
-                    return true;
-                } else if (c == QLatin1Char('/')) {
-                    qWarning("QCommandLineOption: Option names cannot start with a '/'");
-                    return true;
-                } else if (name.contains(QLatin1Char('='))) {
-                    qWarning("QCommandLineOption: Option names cannot contain a '='");
-                    return true;
-                }
-            }
+            if (Q_UNLIKELY(name.isEmpty()))
+                return warn("be empty");
+
+            const QChar c = name.at(0);
+            if (Q_UNLIKELY(c == QLatin1Char('-')))
+                return warn("start with a '-'");
+            if (Q_UNLIKELY(c == QLatin1Char('/')))
+                return warn("start with a '/'");
+            if (Q_UNLIKELY(name.contains(QLatin1Char('='))))
+                return warn("contain a '='");
+
             return false;
+        }
+
+        Q_NEVER_INLINE
+        static bool warn(const char *what) Q_DECL_NOEXCEPT
+        {
+            qWarning("QCommandLineOption: Option names cannot %s", what);
+            return true;
         }
     };
 } // unnamed namespace
@@ -276,7 +279,7 @@ namespace {
 // static
 QStringList QCommandLineOptionPrivate::removeInvalidNames(QStringList nameList)
 {
-    if (nameList.isEmpty())
+    if (Q_UNLIKELY(nameList.isEmpty()))
         qWarning("QCommandLineOption: Options must have at least one name");
     else
         nameList.erase(std::remove_if(nameList.begin(), nameList.end(), IsInvalidName()),

@@ -31,36 +31,30 @@
 **
 ****************************************************************************/
 
+#include "qeglfscursor.h"
+#include "qeglfsintegration.h"
+#include "qeglfsscreen.h"
+
 #include <qpa/qwindowsysteminterface.h>
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QOpenGLShaderProgram>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>
-#include <QtDebug>
 
 #include <QtGui/private/qguiapplication_p.h>
+#include <QtGui/private/qopenglvertexarrayobject_p.h>
 
-#include "qeglplatformcursor_p.h"
-#include "qeglplatformintegration_p.h"
-#include "qeglplatformscreen_p.h"
+#ifndef GL_VERTEX_ARRAY_BINDING
+#define GL_VERTEX_ARRAY_BINDING 0x85B5
+#endif
 
 QT_BEGIN_NAMESPACE
 
-/*!
-    \class QEGLPlatformCursor
-    \brief Mouse cursor implementation using OpenGL.
-    \since 5.2
-    \internal
-    \ingroup qpa
- */
-
-QEGLPlatformCursor::QEGLPlatformCursor(QPlatformScreen *screen)
+QEglFSCursor::QEglFSCursor(QPlatformScreen *screen)
     : m_visible(true),
-      m_screen(static_cast<QEGLPlatformScreen *>(screen)),
+      m_screen(static_cast<QEglFSScreen *>(screen)),
       m_program(0),
-      m_vertexCoordEntry(0),
-      m_textureCoordEntry(0),
       m_textureEntry(0),
       m_deviceListener(0),
       m_updateRequested(false)
@@ -81,35 +75,35 @@ QEGLPlatformCursor::QEGLPlatformCursor(QPlatformScreen *screen)
     setCurrentCursor(&cursor);
 #endif
 
-    m_deviceListener = new QEGLPlatformCursorDeviceListener(this);
+    m_deviceListener = new QEglFSCursorDeviceListener(this);
     connect(QGuiApplicationPrivate::inputDeviceManager(), &QInputDeviceManager::deviceListChanged,
-            m_deviceListener, &QEGLPlatformCursorDeviceListener::onDeviceListChanged);
+            m_deviceListener, &QEglFSCursorDeviceListener::onDeviceListChanged);
     updateMouseStatus();
 }
 
-QEGLPlatformCursor::~QEGLPlatformCursor()
+QEglFSCursor::~QEglFSCursor()
 {
     resetResources();
     delete m_deviceListener;
 }
 
-void QEGLPlatformCursor::updateMouseStatus()
+void QEglFSCursor::updateMouseStatus()
 {
     m_visible = m_deviceListener->hasMouse();
 }
 
-bool QEGLPlatformCursorDeviceListener::hasMouse() const
+bool QEglFSCursorDeviceListener::hasMouse() const
 {
     return QGuiApplicationPrivate::inputDeviceManager()->deviceCount(QInputDeviceManager::DeviceTypePointer) > 0;
 }
 
-void QEGLPlatformCursorDeviceListener::onDeviceListChanged(QInputDeviceManager::DeviceType type)
+void QEglFSCursorDeviceListener::onDeviceListChanged(QInputDeviceManager::DeviceType type)
 {
     if (type == QInputDeviceManager::DeviceTypePointer)
         m_cursor->updateMouseStatus();
 }
 
-void QEGLPlatformCursor::resetResources()
+void QEglFSCursor::resetResources()
 {
     if (QOpenGLContext::currentContext()) {
         delete m_program;
@@ -122,7 +116,7 @@ void QEGLPlatformCursor::resetResources()
     m_cursorAtlas.texture = 0;
 }
 
-void QEGLPlatformCursor::createShaderPrograms()
+void QEglFSCursor::createShaderPrograms()
 {
     static const char *textureVertexProgram =
         "attribute highp vec2 vertexCoordEntry;\n"
@@ -143,14 +137,14 @@ void QEGLPlatformCursor::createShaderPrograms()
     m_program = new QOpenGLShaderProgram;
     m_program->addShaderFromSourceCode(QOpenGLShader::Vertex, textureVertexProgram);
     m_program->addShaderFromSourceCode(QOpenGLShader::Fragment, textureFragmentProgram);
+    m_program->bindAttributeLocation("vertexCoordEntry", 0);
+    m_program->bindAttributeLocation("textureCoordEntry", 1);
     m_program->link();
 
-    m_vertexCoordEntry = m_program->attributeLocation("vertexCoordEntry");
-    m_textureCoordEntry = m_program->attributeLocation("textureCoordEntry");
     m_textureEntry = m_program->uniformLocation("texture");
 }
 
-void QEGLPlatformCursor::createCursorTexture(uint *texture, const QImage &image)
+void QEglFSCursor::createCursorTexture(uint *texture, const QImage &image)
 {
     if (!*texture)
         glGenTextures(1, texture);
@@ -164,7 +158,7 @@ void QEGLPlatformCursor::createCursorTexture(uint *texture, const QImage &image)
                  GL_RGBA, GL_UNSIGNED_BYTE, image.constBits());
 }
 
-void QEGLPlatformCursor::initCursorAtlas()
+void QEglFSCursor::initCursorAtlas()
 {
     static QByteArray json = qgetenv("QT_QPA_EGLFS_CURSOR");
     if (json.isEmpty())
@@ -202,7 +196,7 @@ void QEGLPlatformCursor::initCursorAtlas()
 }
 
 #ifndef QT_NO_CURSOR
-void QEGLPlatformCursor::changeCursor(QCursor *cursor, QWindow *window)
+void QEglFSCursor::changeCursor(QCursor *cursor, QWindow *window)
 {
     Q_UNUSED(window);
     const QRect oldCursorRect = cursorRect();
@@ -210,7 +204,7 @@ void QEGLPlatformCursor::changeCursor(QCursor *cursor, QWindow *window)
         update(oldCursorRect | cursorRect());
 }
 
-bool QEGLPlatformCursor::setCurrentCursor(QCursor *cursor)
+bool QEglFSCursor::setCurrentCursor(QCursor *cursor)
 {
     if (!m_visible)
         return false;
@@ -263,7 +257,7 @@ private:
     QRegion m_region;
 };
 
-bool QEGLPlatformCursor::event(QEvent *e)
+bool QEglFSCursor::event(QEvent *e)
 {
     if (e->type() == QEvent::User + 1) {
         CursorUpdateEvent *ev = static_cast<CursorUpdateEvent *>(e);
@@ -275,7 +269,7 @@ bool QEGLPlatformCursor::event(QEvent *e)
     return QPlatformCursor::event(e);
 }
 
-void QEGLPlatformCursor::update(const QRegion &rgn)
+void QEglFSCursor::update(const QRegion &rgn)
 {
     if (!m_updateRequested) {
         // Must not flush the window system events directly from here since we are likely to
@@ -286,17 +280,17 @@ void QEGLPlatformCursor::update(const QRegion &rgn)
     }
 }
 
-QRect QEGLPlatformCursor::cursorRect() const
+QRect QEglFSCursor::cursorRect() const
 {
     return QRect(m_cursor.pos - m_cursor.hotSpot, m_cursor.size);
 }
 
-QPoint QEGLPlatformCursor::pos() const
+QPoint QEglFSCursor::pos() const
 {
     return m_cursor.pos;
 }
 
-void QEGLPlatformCursor::setPos(const QPoint &pos)
+void QEglFSCursor::setPos(const QPoint &pos)
 {
     QGuiApplicationPrivate::inputDeviceManager()->setCursorPos(pos);
     const QRect oldCursorRect = cursorRect();
@@ -305,7 +299,7 @@ void QEGLPlatformCursor::setPos(const QPoint &pos)
     m_screen->handleCursorMove(m_cursor.pos);
 }
 
-void QEGLPlatformCursor::pointerEvent(const QMouseEvent &event)
+void QEglFSCursor::pointerEvent(const QMouseEvent &event)
 {
     if (event.type() != QEvent::MouseMove)
         return;
@@ -315,7 +309,7 @@ void QEGLPlatformCursor::pointerEvent(const QMouseEvent &event)
     m_screen->handleCursorMove(m_cursor.pos);
 }
 
-void QEGLPlatformCursor::paintOnScreen()
+void QEglFSCursor::paintOnScreen()
 {
     if (!m_visible)
         return;
@@ -331,8 +325,105 @@ void QEGLPlatformCursor::paintOnScreen()
     draw(r);
 }
 
-void QEGLPlatformCursor::draw(const QRectF &r)
+// In order to prevent breaking code doing custom OpenGL rendering while
+// expecting the state in the context unchanged, save and restore all the state
+// we touch. The exception is Qt Quick where the scenegraph is known to be able
+// to deal with the changes we make.
+struct StateSaver
 {
+    StateSaver() {
+        f = QOpenGLContext::currentContext()->functions();
+        vaoHelper = new QOpenGLVertexArrayObjectHelper(QOpenGLContext::currentContext());
+
+        static bool windowsChecked = false;
+        static bool shouldSave = true;
+        if (!windowsChecked) {
+            windowsChecked = true;
+            QWindowList windows = QGuiApplication::allWindows();
+            if (!windows.isEmpty() && windows[0]->inherits("QQuickWindow"))
+                shouldSave = false;
+        }
+        saved = shouldSave;
+        if (!shouldSave)
+            return;
+
+        f->glGetIntegerv(GL_CURRENT_PROGRAM, &program);
+        f->glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture);
+        f->glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTexture);
+        f->glGetIntegerv(GL_FRONT_FACE, &frontFace);
+        cull = f->glIsEnabled(GL_CULL_FACE);
+        depthTest = f->glIsEnabled(GL_DEPTH_TEST);
+        blend = f->glIsEnabled(GL_BLEND);
+        f->glGetIntegerv(GL_BLEND_SRC_RGB, blendFunc);
+        f->glGetIntegerv(GL_BLEND_SRC_ALPHA, blendFunc + 1);
+        f->glGetIntegerv(GL_BLEND_DST_RGB, blendFunc + 2);
+        f->glGetIntegerv(GL_BLEND_DST_ALPHA, blendFunc + 3);
+        f->glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &arrayBuf);
+        if (vaoHelper->isValid())
+            f->glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vao);
+        for (int i = 0; i < 2; ++i) {
+            f->glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &va[i].enabled);
+            f->glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_SIZE, &va[i].size);
+            f->glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_TYPE, &va[i].type);
+            f->glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_NORMALIZED, &va[i].normalized);
+            f->glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_STRIDE, &va[i].stride);
+            f->glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING, &va[i].buffer);
+            f->glGetVertexAttribPointerv(i, GL_VERTEX_ATTRIB_ARRAY_POINTER, &va[i].pointer);
+        }
+    }
+    ~StateSaver() {
+        if (saved) {
+            f->glUseProgram(program);
+            f->glBindTexture(GL_TEXTURE_2D, texture);
+            f->glActiveTexture(activeTexture);
+            f->glFrontFace(frontFace);
+            if (cull)
+                f->glEnable(GL_CULL_FACE);
+            else
+                f->glDisable(GL_CULL_FACE);
+            if (depthTest)
+                f->glEnable(GL_DEPTH_TEST);
+            else
+                f->glDisable(GL_DEPTH_TEST);
+            if (blend)
+                f->glEnable(GL_BLEND);
+            else
+                f->glDisable(GL_BLEND);
+            f->glBlendFuncSeparate(blendFunc[0], blendFunc[1], blendFunc[2], blendFunc[3]);
+            f->glBindBuffer(GL_ARRAY_BUFFER, arrayBuf);
+            if (vaoHelper->isValid())
+                vaoHelper->glBindVertexArray(vao);
+            for (int i = 0; i < 2; ++i) {
+                if (va[i].enabled)
+                    f->glEnableVertexAttribArray(i);
+                else
+                    f->glDisableVertexAttribArray(i);
+                f->glBindBuffer(GL_ARRAY_BUFFER, va[i].buffer);
+                f->glVertexAttribPointer(i, va[i].size, va[i].type, va[i].normalized, va[i].stride, va[i].pointer);
+            }
+        }
+        delete vaoHelper;
+    }
+    QOpenGLFunctions *f;
+    QOpenGLVertexArrayObjectHelper *vaoHelper;
+    bool saved;
+    GLint program;
+    GLint texture;
+    GLint activeTexture;
+    GLint frontFace;
+    bool cull;
+    bool depthTest;
+    bool blend;
+    GLint blendFunc[4];
+    GLint vao;
+    GLint arrayBuf;
+    struct { GLint enabled, type, size, normalized, stride, buffer; GLvoid *pointer; } va[2];
+};
+
+void QEglFSCursor::draw(const QRectF &r)
+{
+    StateSaver stateSaver;
+
     if (!m_program) {
         // one time initialization
         initializeOpenGLFunctions();
@@ -382,13 +473,16 @@ void QEGLPlatformCursor::draw(const QRectF &r)
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_cursor.texture);
+
+    if (stateSaver.vaoHelper->isValid())
+        stateSaver.vaoHelper->glBindVertexArray(0);
+
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    m_program->enableAttributeArray(m_vertexCoordEntry);
-    m_program->enableAttributeArray(m_textureCoordEntry);
-
-    m_program->setAttributeArray(m_vertexCoordEntry, cursorCoordinates, 2);
-    m_program->setAttributeArray(m_textureCoordEntry, textureCoordinates, 2);
+    m_program->enableAttributeArray(0);
+    m_program->enableAttributeArray(1);
+    m_program->setAttributeArray(0, cursorCoordinates, 2);
+    m_program->setAttributeArray(1, textureCoordinates, 2);
 
     m_program->setUniformValue(m_textureEntry, 0);
 
@@ -397,13 +491,11 @@ void QEGLPlatformCursor::draw(const QRectF &r)
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST); // disable depth testing to make sure cursor is always on top
+
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    glDisable(GL_BLEND);
 
-    glBindTexture(GL_TEXTURE_2D, 0);
-    m_program->disableAttributeArray(m_textureCoordEntry);
-    m_program->disableAttributeArray(m_vertexCoordEntry);
-
+    m_program->disableAttributeArray(0);
+    m_program->disableAttributeArray(1);
     m_program->release();
 }
 

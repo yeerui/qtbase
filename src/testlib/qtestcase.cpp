@@ -247,7 +247,7 @@ static void stackTrace()
    \note This macro can only be used in a test function that is invoked
    by the test framework.
 
-   \sa QTRY_VERIFY(), QVERIFY(), QCOMPARE(), QTRY_COMPARE()
+   \sa QTRY_VERIFY(), QTRY_VERIFY2_WITH_TIMEOUT(), QVERIFY(), QCOMPARE(), QTRY_COMPARE()
 */
 
 
@@ -261,7 +261,47 @@ static void stackTrace()
    \note This macro can only be used in a test function that is invoked
    by the test framework.
 
-   \sa QTRY_VERIFY_WITH_TIMEOUT(), QVERIFY(), QCOMPARE(), QTRY_COMPARE()
+   \sa QTRY_VERIFY_WITH_TIMEOUT(), QTRY_VERIFY2(), QVERIFY(), QCOMPARE(), QTRY_COMPARE()
+*/
+
+/*! \macro QTRY_VERIFY2_WITH_TIMEOUT(condition, message, timeout)
+   \since 5.6
+
+   \relates QTest
+
+   The QTRY_VERIFY2_WITH_TIMEOUT macro is similar to QTRY_VERIFY_WITH_TIMEOUT()
+   except that it outputs a verbose \a message when \a condition is still false
+   after the specified timeout. The \a message is a plain C string.
+
+   Example:
+   \code
+   QTRY_VERIFY2_WITH_TIMEOUT(list.size() > 2, QByteArray::number(list.size()).constData(), 10000);
+   \endcode
+
+   \note This macro can only be used in a test function that is invoked
+   by the test framework.
+
+   \sa QTRY_VERIFY(), QTRY_VERIFY_WITH_TIMEOUT(), QVERIFY(), QCOMPARE(), QTRY_COMPARE()
+*/
+
+/*! \macro QTRY_VERIFY2(condition, message)
+   \since 5.6
+
+   \relates QTest
+
+   Checks the \a condition by invoking QTRY_VERIFY2_WITH_TIMEOUT() with a timeout
+   of five seconds. If \a condition is then still false, \a message is output.
+   The \a message is a plain C string.
+
+   Example:
+   \code
+   QTRY_VERIFY2_WITH_TIMEOUT(list.size() > 2, QByteArray::number(list.size()).constData());
+   \endcode
+
+   \note This macro can only be used in a test function that is invoked
+   by the test framework.
+
+   \sa QTRY_VERIFY2_WITH_TIMEOUT(), QTRY_VERIFY2(), QVERIFY(), QCOMPARE(), QTRY_COMPARE()
 */
 
 /*! \macro QTRY_COMPARE_WITH_TIMEOUT(actual, expected, timeout)
@@ -1318,7 +1358,7 @@ static void stackTrace()
 */
 
 /*!
-    \fn QTouchEventSequence QTest::touchEvent(QWindow *window, QTouchDevice *device, bool autoCommit = true)
+    \fn QTouchEventSequence QTest::touchEvent(QWindow *window, QTouchDevice *device, bool autoCommit)
     \since 5.0
 
     Creates and returns a QTouchEventSequence for the \a device to
@@ -1335,7 +1375,7 @@ static void stackTrace()
 */
 
 /*!
-    \fn QTouchEventSequence QTest::touchEvent(QWidget *widget, QTouchDevice *device, bool autoCommit = true)
+    \fn QTouchEventSequence QTest::touchEvent(QWidget *widget, QTouchDevice *device, bool autoCommit)
 
     Creates and returns a QTouchEventSequence for the \a device to
     simulate events for \a widget.
@@ -2617,13 +2657,137 @@ FatalSignalHandler::~FatalSignalHandler()
 } // namespace
 
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+
+// Helper class for resolving symbol names by dynamically loading "dbghelp.dll".
+class DebugSymbolResolver
+{
+    Q_DISABLE_COPY(DebugSymbolResolver)
+public:
+    struct Symbol {
+        Symbol() : name(Q_NULLPTR), address(0) {}
+
+        const char *name; // Must be freed by caller.
+        DWORD64 address;
+    };
+
+    explicit DebugSymbolResolver(HANDLE process);
+    ~DebugSymbolResolver() { cleanup(); }
+
+    bool isValid() const { return m_symFromAddr; }
+
+    Symbol resolveSymbol(DWORD64 address) const;
+
+private:
+    // typedefs from DbgHelp.h/.dll
+    struct DBGHELP_SYMBOL_INFO { // SYMBOL_INFO
+        ULONG       SizeOfStruct;
+        ULONG       TypeIndex;        // Type Index of symbol
+        ULONG64     Reserved[2];
+        ULONG       Index;
+        ULONG       Size;
+        ULONG64     ModBase;          // Base Address of module comtaining this symbol
+        ULONG       Flags;
+        ULONG64     Value;            // Value of symbol, ValuePresent should be 1
+        ULONG64     Address;          // Address of symbol including base address of module
+        ULONG       Register;         // register holding value or pointer to value
+        ULONG       Scope;            // scope of the symbol
+        ULONG       Tag;              // pdb classification
+        ULONG       NameLen;          // Actual length of name
+        ULONG       MaxNameLen;
+        CHAR        Name[1];          // Name of symbol
+    };
+
+    typedef BOOL (__stdcall *SymInitializeType)(HANDLE, PCSTR, BOOL);
+    typedef BOOL (__stdcall *SymFromAddrType)(HANDLE, DWORD64, PDWORD64, DBGHELP_SYMBOL_INFO *);
+
+    void cleanup();
+
+    const HANDLE m_process;
+    HMODULE m_dbgHelpLib;
+    SymFromAddrType m_symFromAddr;
+};
+
+void DebugSymbolResolver::cleanup()
+{
+    if (m_dbgHelpLib)
+        FreeLibrary(m_dbgHelpLib);
+    m_dbgHelpLib = 0;
+    m_symFromAddr = Q_NULLPTR;
+}
+
+DebugSymbolResolver::DebugSymbolResolver(HANDLE process)
+    : m_process(process), m_dbgHelpLib(0), m_symFromAddr(Q_NULLPTR)
+{
+    bool success = false;
+    m_dbgHelpLib = LoadLibraryW(L"dbghelp.dll");
+    if (m_dbgHelpLib) {
+        SymInitializeType symInitialize = (SymInitializeType)(GetProcAddress(m_dbgHelpLib, "SymInitialize"));
+        m_symFromAddr = (SymFromAddrType)(GetProcAddress(m_dbgHelpLib, "SymFromAddr"));
+        success = symInitialize && m_symFromAddr && symInitialize(process, NULL, TRUE);
+    }
+    if (!success)
+        cleanup();
+}
+
+DebugSymbolResolver::Symbol DebugSymbolResolver::resolveSymbol(DWORD64 address) const
+{
+    // reserve additional buffer where SymFromAddr() will store the name
+    struct NamedSymbolInfo : public DBGHELP_SYMBOL_INFO {
+        enum { symbolNameLength = 255 };
+
+        char name[symbolNameLength + 1];
+    };
+
+    Symbol result;
+    if (!isValid())
+        return result;
+    NamedSymbolInfo symbolBuffer;
+    memset(&symbolBuffer, 0, sizeof(NamedSymbolInfo));
+    symbolBuffer.MaxNameLen = NamedSymbolInfo::symbolNameLength;
+    symbolBuffer.SizeOfStruct = sizeof(DBGHELP_SYMBOL_INFO);
+    if (!m_symFromAddr(m_process, address, 0, &symbolBuffer))
+        return result;
+    result.name = qstrdup(symbolBuffer.Name);
+    result.address = symbolBuffer.Address;
+    return result;
+}
+
 static LONG WINAPI windowsFaultHandler(struct _EXCEPTION_POINTERS *exInfo)
 {
+    enum { maxStackFrames = 100 };
     char appName[MAX_PATH];
     if (!GetModuleFileNameA(NULL, appName, MAX_PATH))
         appName[0] = 0;
-    fprintf(stderr, "A crash occurred in %s (exception code 0x%lx).",
-            appName, exInfo->ExceptionRecord->ExceptionCode);
+
+    const void *exceptionAddress = exInfo->ExceptionRecord->ExceptionAddress;
+    fprintf(stderr, "A crash occurred in %s.\n\n"
+                    "Exception address: 0x%p\n"
+                    "Exception code   : 0x%lx\n",
+            appName, exceptionAddress, exInfo->ExceptionRecord->ExceptionCode);
+
+    DebugSymbolResolver resolver(GetCurrentProcess());
+    if (resolver.isValid()) {
+        DebugSymbolResolver::Symbol exceptionSymbol = resolver.resolveSymbol(DWORD64(exceptionAddress));
+        if (exceptionSymbol.name) {
+            fprintf(stderr, "Nearby symbol    : %s\n", exceptionSymbol.name);
+            delete [] exceptionSymbol.name;
+        }
+        void *stack[maxStackFrames];
+        fputs("\nStack:\n", stderr);
+        const unsigned frameCount = CaptureStackBackTrace(0, DWORD(maxStackFrames), stack, NULL);
+        for (unsigned f = 0; f < frameCount; ++f)     {
+            DebugSymbolResolver::Symbol symbol = resolver.resolveSymbol(DWORD64(stack[f]));
+            if (symbol.name) {
+                fprintf(stderr, "#%3u: %s() - 0x%p\n", f + 1, symbol.name, (const void *)symbol.address);
+                delete [] symbol.name;
+            } else {
+                fprintf(stderr, "#%3u: Unable to obtain symbol\n", f + 1);
+            }
+        }
+    }
+
+    fputc('\n', stderr);
+
     return EXCEPTION_EXECUTE_HANDLER;
 }
 #endif // Q_OS_WIN) && !Q_OS_WINCE && !Q_OS_WINRT
@@ -3337,6 +3501,8 @@ TO_STRING_IMPL(quint64, %llu)
 #endif
 TO_STRING_IMPL(bool, %d)
 TO_STRING_IMPL(char, %c)
+TO_STRING_IMPL(signed char, %hhd)
+TO_STRING_IMPL(unsigned char, %hhu)
 TO_STRING_IMPL(float, %g)
 TO_STRING_IMPL(double, %lg)
 

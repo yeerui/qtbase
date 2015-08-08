@@ -503,6 +503,7 @@ void QMetaCallEvent::placeMetaCall(QObject *object)
     \brief Exception-safe wrapper around QObject::blockSignals()
     \since 5.3
     \ingroup objectmodel
+    \inmodule QtCore
 
     \reentrant
 
@@ -909,14 +910,7 @@ QObject::~QObject()
     }
 
     if (!d->isWidget && d->isSignalConnected(0)) {
-        QT_TRY {
-            emit destroyed(this);
-        } QT_CATCH(...) {
-            // all the signal/slots connections are still in place - if we don't
-            // quit now, we will crash pretty soon.
-            qWarning("Detected an unexpected exception in ~QObject while emitting destroyed().");
-            QT_RETHROW;
-        }
+        emit destroyed(this);
     }
 
     if (d->declarativeData) {

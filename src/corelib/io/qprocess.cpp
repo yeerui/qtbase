@@ -101,6 +101,19 @@ QT_END_NAMESPACE
 QT_BEGIN_NAMESPACE
 
 /*!
+    \since 5.6
+
+    \macro QT_NO_PROCESS_COMBINED_ARGUMENT_START
+    \relates QProcess
+
+    Disables the QProcess::start() overload taking a single string.
+    In most cases where it is used, the user intends for the first argument
+    to be treated atomically as per the other overload.
+
+    \sa QProcess::start()
+*/
+
+/*!
     \class QProcessEnvironment
     \inmodule QtCore
 
@@ -264,11 +277,16 @@ bool QProcessEnvironment::operator==(const QProcessEnvironment &other) const
 {
     if (d == other.d)
         return true;
-    if (d && other.d) {
-        QProcessEnvironmentPrivate::OrderedMutexLocker locker(d, other.d);
-        return d->hash == other.d->hash;
+    if (d) {
+        if (other.d) {
+            QProcessEnvironmentPrivate::OrderedMutexLocker locker(d, other.d);
+            return d->hash == other.d->hash;
+        } else {
+            return isEmpty();
+        }
+    } else {
+        return other.isEmpty();
     }
-    return false;
 }
 
 /*!
@@ -497,8 +515,8 @@ void QProcessPrivate::Channel::clear()
     the process as arguments, and you can also call exitCode() to
     obtain the exit code of the last process that finished, and
     exitStatus() to obtain its exit status. If an error occurs at
-    any point in time, QProcess will emit the error() signal. You
-    can also call error() to find the type of error that occurred
+    any point in time, QProcess will emit the errorOccurred() signal.
+    You can also call error() to find the type of error that occurred
     last, and state() to find the current process state.
 
     \section1 Communicating via Channels
@@ -735,6 +753,14 @@ void QProcessPrivate::Channel::clear()
 
 /*!
     \fn void QProcess::error(QProcess::ProcessError error)
+    \obsolete
+
+    Use errorOccurred() instead.
+*/
+
+/*!
+    \fn void QProcess::errorOccurred(QProcess::ProcessError error)
+    \since 5.6
 
     This signal is emitted when an error occurs with the process. The
     specified \a error describes the type of error that occurred.
@@ -935,6 +961,7 @@ void QProcessPrivate::setErrorAndEmit(QProcess::ProcessError error, const QStrin
     Q_Q(QProcess);
     Q_ASSERT(error != QProcess::UnknownError);
     setError(error, description);
+    emit q->errorOccurred(processError);
     emit q->error(processError);
 }
 
@@ -1089,7 +1116,7 @@ bool QProcessPrivate::_q_processDied()
 
     // the process may have died before it got a chance to report that it was
     // either running or stopped, so we will call _q_startupNotification() and
-    // give it a chance to emit started() or error(FailedToStart).
+    // give it a chance to emit started() or errorOccurred(FailedToStart).
     if (processState == QProcess::Starting) {
         if (!_q_startupNotification())
             return true;
@@ -2066,10 +2093,10 @@ QByteArray QProcess::readAllStandardError()
 
     The QProcess object will immediately enter the Starting state. If the
     process starts successfully, QProcess will emit started(); otherwise,
-    error() will be emitted.
+    errorOccurred() will be emitted.
 
     \note Processes are started asynchronously, which means the started()
-    and error() signals may be delayed. Call waitForStarted() to make
+    and errorOccurred() signals may be delayed. Call waitForStarted() to make
     sure the process has started (or has failed to start) and those signals
     have been emitted.
 
@@ -2248,7 +2275,20 @@ static QStringList parseCombinedArgString(const QString &program)
     After the \a command string has been split and unquoted, this function
     behaves like the overload which takes the arguments as a string list.
 
+    You can disable this overload by defining \c
+    QT_NO_PROCESS_COMBINED_ARGUMENT_START when you compile your applications.
+    This can be useful if you want to ensure that you are not splitting arguments
+    unintentionally, for example. In virtually all cases, using the other overload
+    is the preferred method.
+
+    On operating systems where the system API for passing command line
+    arguments to a subprocess natively uses a single string (Windows), one can
+    conceive command lines which cannot be passed via QProcess's portable
+    list-based API. In these rare cases you need to use setProgram() and
+    setNativeArguments() instead of this function.
+
 */
+#if !defined(QT_NO_PROCESS_COMBINED_ARGUMENT_START)
 void QProcess::start(const QString &command, OpenMode mode)
 {
     QStringList args = parseCombinedArgString(command);
@@ -2263,6 +2303,7 @@ void QProcess::start(const QString &command, OpenMode mode)
 
     start(prog, args, mode);
 }
+#endif
 
 /*!
     \since 5.0

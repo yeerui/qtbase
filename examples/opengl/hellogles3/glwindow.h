@@ -38,59 +38,61 @@
 **
 ****************************************************************************/
 
-#ifndef MAINWINDOW_H
-#define MAINWINDOW_H
+#ifndef GLWIDGET_H
+#define GLWIDGET_H
 
-#include <QList>
-#include <QMainWindow>
+#include <QOpenGLWindow>
+#include <QMatrix4x4>
+#include <QVector3D>
+#include "../hellogl2/logo.h"
 
-QT_BEGIN_NAMESPACE
-class QAction;
-class QMenu;
-class QTextEdit;
-QT_END_NAMESPACE
+class QOpenGLTexture;
+class QOpenGLShaderProgram;
+class QOpenGLBuffer;
+class QOpenGLVertexArrayObject;
 
-class MainWindow : public QMainWindow
+class GLWindow : public QOpenGLWindow
 {
     Q_OBJECT
+    Q_PROPERTY(float z READ z WRITE setZ)
+    Q_PROPERTY(float r READ r WRITE setR)
+    Q_PROPERTY(float r2 READ r2 WRITE setR2)
 
 public:
-    MainWindow();
+    GLWindow();
+    ~GLWindow();
 
+    void initializeGL();
+    void resizeGL(int w, int h);
+    void paintGL();
+
+    float z() const { return m_eye.z(); }
+    void setZ(float v);
+
+    float r() const { return m_r; }
+    void setR(float v);
+    float r2() const { return m_r2; }
+    void setR2(float v);
 private slots:
-    void newFile();
-    void open();
-    void save();
-    void saveAs();
-    void openRecentFile();
-    void about();
-
+    void startSecondStage();
 private:
-    void createActions();
-    void createMenus();
-    void loadFile(const QString &fileName);
-    void saveFile(const QString &fileName);
-    void setCurrentFile(const QString &fileName);
-    void updateRecentFileActions();
-    QString strippedName(const QString &fullFileName);
-
-    QString curFile;
-
-    QTextEdit *textEdit;
-    QMenu *fileMenu;
-    QMenu *recentFilesMenu;
-    QMenu *helpMenu;
-    QAction *newAct;
-    QAction *openAct;
-    QAction *saveAct;
-    QAction *saveAsAct;
-    QAction *exitAct;
-    QAction *aboutAct;
-    QAction *aboutQtAct;
-    QAction *separatorAct;
-
-    enum { MaxRecentFiles = 5 };
-    QAction *recentFileActs[MaxRecentFiles];
+    QOpenGLTexture *m_texture;
+    QOpenGLShaderProgram *m_program;
+    QOpenGLBuffer *m_vbo;
+    QOpenGLVertexArrayObject *m_vao;
+    Logo m_logo;
+    int m_projMatrixLoc;
+    int m_camMatrixLoc;
+    int m_worldMatrixLoc;
+    int m_myMatrixLoc;
+    int m_lightPosLoc;
+    QMatrix4x4 m_proj;
+    QMatrix4x4 m_world;
+    QVector3D m_eye;
+    QVector3D m_target;
+    bool m_uniformsDirty;
+    float m_r;
+    float m_r2;
 };
 
 #endif

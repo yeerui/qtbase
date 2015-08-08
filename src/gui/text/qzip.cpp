@@ -411,38 +411,6 @@ struct FileHeader
 };
 Q_DECLARE_TYPEINFO(FileHeader, Q_MOVABLE_TYPE);
 
-QZipReader::FileInfo::FileInfo()
-    : isDir(false), isFile(false), isSymLink(false), crc(0), size(0)
-{
-}
-
-QZipReader::FileInfo::~FileInfo()
-{
-}
-
-QZipReader::FileInfo::FileInfo(const FileInfo &other)
-{
-    operator=(other);
-}
-
-QZipReader::FileInfo& QZipReader::FileInfo::operator=(const FileInfo &other)
-{
-    filePath = other.filePath;
-    isDir = other.isDir;
-    isFile = other.isFile;
-    isSymLink = other.isSymLink;
-    permissions = other.permissions;
-    crc = other.crc;
-    size = other.size;
-    lastModified = other.lastModified;
-    return *this;
-}
-
-bool QZipReader::FileInfo::isValid() const
-{
-    return isDir || isFile || isSymLink;
-}
-
 class QZipPrivate
 {
 public:
@@ -457,18 +425,19 @@ public:
             delete device;
     }
 
-    void fillFileInfo(int index, QZipReader::FileInfo &fileInfo) const;
+    QZipReader::FileInfo fillFileInfo(int index) const;
 
     QIODevice *device;
     bool ownDevice;
     bool dirtyFileTree;
-    QList<FileHeader> fileHeaders;
+    QVector<FileHeader> fileHeaders;
     QByteArray comment;
     uint start_of_directory;
 };
 
-void QZipPrivate::fillFileInfo(int index, QZipReader::FileInfo &fileInfo) const
+QZipReader::FileInfo QZipPrivate::fillFileInfo(int index) const
 {
+    QZipReader::FileInfo fileInfo;
     FileHeader header = fileHeaders.at(index);
     quint32 mode = readUInt(header.h.external_file_attributes);
     const HostOS hostOS = HostOS(readUShort(header.h.version_made) >> 8);
@@ -510,7 +479,7 @@ void QZipPrivate::fillFileInfo(int index, QZipReader::FileInfo &fileInfo) const
         break;
     default:
         qWarning("QZip: Zip entry format at %d is not supported.", index);
-        return; // we don't support anything else
+        return fileInfo; // we don't support anything else
     }
 
     ushort general_purpose_bits = readUShort(header.h.general_purpose_bits);
@@ -527,6 +496,8 @@ void QZipPrivate::fillFileInfo(int index, QZipReader::FileInfo &fileInfo) const
         fileInfo.filePath = fileInfo.filePath.mid(1);
     while (!fileInfo.filePath.isEmpty() && fileInfo.filePath.at(fileInfo.filePath.size() - 1) == QLatin1Char('/'))
         fileInfo.filePath.chop(1);
+
+    return fileInfo;
 }
 
 class QZipReaderPrivate : public QZipPrivate
@@ -921,17 +892,14 @@ bool QZipReader::exists() const
 /*!
     Returns the list of files the archive contains.
 */
-QList<QZipReader::FileInfo> QZipReader::fileInfoList() const
+QVector<QZipReader::FileInfo> QZipReader::fileInfoList() const
 {
     d->scanFiles();
-    QList<QZipReader::FileInfo> files;
+    QVector<FileInfo> files;
     const int numFileHeaders = d->fileHeaders.size();
     files.reserve(numFileHeaders);
-    for (int i = 0; i < numFileHeaders; ++i) {
-        QZipReader::FileInfo fi;
-        d->fillFileInfo(i, fi);
-        files.append(fi);
-    }
+    for (int i = 0; i < numFileHeaders; ++i)
+        files.append(d->fillFileInfo(i));
     return files;
 
 }
@@ -955,10 +923,9 @@ int QZipReader::count() const
 QZipReader::FileInfo QZipReader::entryInfoAt(int index) const
 {
     d->scanFiles();
-    QZipReader::FileInfo fi;
     if (index >= 0 && index < d->fileHeaders.count())
-        d->fillFileInfo(index, fi);
-    return fi;
+        return d->fillFileInfo(index);
+    return QZipReader::FileInfo();
 }
 
 /*!
@@ -1054,7 +1021,7 @@ bool QZipReader::extractAll(const QString &destinationDir) const
     QDir baseDir(destinationDir);
 
     // create directories first
-    QList<FileInfo> allFiles = fileInfoList();
+    const QVector<FileInfo> allFiles = fileInfoList();
     foreach (const FileInfo &fi, allFiles) {
         const QString absPath = destinationDir + QDir::separator() + fi.filePath;
         if (fi.isDir) {

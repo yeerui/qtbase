@@ -97,8 +97,8 @@ private slots:
     void paint_2();
     void setWidget_data();
     void setWidget();
-    void eventFilter_data();
-    void eventFilter();
+    void testEventFilter_data();
+    void testEventFilter();
     void focusInEvent_data();
     void focusInEvent();
     void focusInEventNoWidget();
@@ -314,7 +314,7 @@ void tst_QGraphicsProxyWidget::qgraphicsproxywidget()
     SubQGraphicsProxyWidget proxy;
     proxy.paint(0, 0, 0);
     proxy.setWidget(0);
-    QVERIFY(proxy.type() == QGraphicsProxyWidget::Type);
+    QCOMPARE(proxy.type(), int(QGraphicsProxyWidget::Type));
     QVERIFY(!proxy.widget());
     QEvent event(QEvent::None);
     proxy.call_eventFilter(0, &event);
@@ -533,7 +533,7 @@ void tst_QGraphicsProxyWidget::setWidget()
 }
 
 Q_DECLARE_METATYPE(QEvent::Type)
-void tst_QGraphicsProxyWidget::eventFilter_data()
+void tst_QGraphicsProxyWidget::testEventFilter_data()
 {
     QTest::addColumn<QEvent::Type>("eventType");
     QTest::addColumn<bool>("fromObject"); // big grin evil
@@ -552,7 +552,7 @@ void tst_QGraphicsProxyWidget::eventFilter_data()
 }
 
 // protected bool eventFilter(QObject* object, QEvent* event)
-void tst_QGraphicsProxyWidget::eventFilter()
+void tst_QGraphicsProxyWidget::testEventFilter()
 {
     QFETCH(QEvent::Type, eventType);
     QFETCH(bool, fromObject);
@@ -3017,36 +3017,36 @@ void tst_QGraphicsProxyWidget::createProxyForChildWidget()
     layout->addWidget(rightDial);
     window.setLayout(layout);
 
-    QVERIFY(window.graphicsProxyWidget() == 0);
-    QVERIFY(checkbox->graphicsProxyWidget() == 0);
+    QVERIFY(!window.graphicsProxyWidget());
+    QVERIFY(!checkbox->graphicsProxyWidget());
 
     QGraphicsProxyWidget *windowProxy = scene.addWidget(&window);
     QGraphicsView view(&scene);
     view.show();
     view.resize(500,500);
 
-    QVERIFY(window.graphicsProxyWidget() == windowProxy);
-    QVERIFY(box->graphicsProxyWidget() == 0);
-    QVERIFY(checkbox->graphicsProxyWidget() == 0);
+    QCOMPARE(window.graphicsProxyWidget(), windowProxy);
+    QVERIFY(!box->graphicsProxyWidget());
+    QVERIFY(!checkbox->graphicsProxyWidget());
 
     QPointer<QGraphicsProxyWidget> checkboxProxy = windowProxy->createProxyForChildWidget(checkbox);
 
     QGraphicsProxyWidget *boxProxy = box->graphicsProxyWidget();
 
     QVERIFY(boxProxy);
-    QVERIFY(checkbox->graphicsProxyWidget() == checkboxProxy);
-    QVERIFY(checkboxProxy->parentItem() == boxProxy);
-    QVERIFY(boxProxy->parentItem() == windowProxy);
+    QCOMPARE(checkbox->graphicsProxyWidget(), checkboxProxy.data());
+    QCOMPARE(checkboxProxy->parentItem(), boxProxy);
+    QCOMPARE(boxProxy->parentItem(), windowProxy);
 
     QVERIFY(checkboxProxy->mapToScene(QPointF()) == checkbox->mapTo(&window, QPoint()));
-    QVERIFY(checkboxProxy->size() == checkbox->size());
-    QVERIFY(boxProxy->size() == box->size());
+    QCOMPARE(checkboxProxy->size().toSize(), checkbox->size());
+    QCOMPARE(boxProxy->size().toSize(), box->size());
 
     window.resize(500,500);
-    QVERIFY(windowProxy->size() == QSize(500,500));
+    QCOMPARE(windowProxy->size().toSize(), QSize(500,500));
     QVERIFY(checkboxProxy->mapToScene(QPointF()) == checkbox->mapTo(&window, QPoint()));
-    QVERIFY(checkboxProxy->size() == checkbox->size());
-    QVERIFY(boxProxy->size() == box->size());
+    QCOMPARE(checkboxProxy->size().toSize(), checkbox->size());
+    QCOMPARE(boxProxy->size().toSize(), box->size());
 
     QTest::qWait(10);
 
@@ -3064,9 +3064,9 @@ void tst_QGraphicsProxyWidget::createProxyForChildWidget()
 
     boxProxy->setWidget(0);
 
-    QVERIFY(checkbox->graphicsProxyWidget() == 0);
-    QVERIFY(box->graphicsProxyWidget() == 0);
-    QVERIFY(checkboxProxy == 0);
+    QVERIFY(!checkbox->graphicsProxyWidget());
+    QVERIFY(!box->graphicsProxyWidget());
+    QVERIFY(checkboxProxy.isNull());
 
     delete boxProxy;
 }

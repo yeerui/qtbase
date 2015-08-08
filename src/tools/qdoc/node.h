@@ -245,7 +245,7 @@ public:
     virtual QmlPropertyNode* hasQmlProperty(const QString& ) const { return 0; }
     virtual QmlPropertyNode* hasQmlProperty(const QString&, bool ) const { return 0; }
     virtual void getMemberNamespaces(NodeMap& ) { }
-    virtual void getMemberClasses(NodeMap& ) { }
+    virtual void getMemberClasses(NodeMap& ) const { }
     virtual bool isInternal() const;
     virtual void setDataType(const QString& ) { }
     virtual void setReadOnly(bool ) { }
@@ -255,6 +255,7 @@ public:
     virtual QString element() const { return QString(); }
     virtual Tree* tree() const;
     virtual void findChildren(const QString& , NodeList& nodes) const { nodes.clear(); }
+    virtual void setNoAutoList(bool ) { }
     bool isIndexNode() const { return indexNodeFlag_; }
     NodeType type() const { return (NodeType) nodeType_; }
     virtual DocSubtype docSubtype() const { return NoSubtype; }
@@ -365,6 +366,7 @@ private:
     static int propertyGroupCount_;
     static QMap<QString,Node::NodeType> goals_;
 };
+Q_DECLARE_TYPEINFO(Node::DocSubtype, Q_PRIMITIVE_TYPE);
 
 class Aggregate : public Node
 {
@@ -1096,7 +1098,8 @@ class CollectionNode : public Aggregate
  CollectionNode(NodeType type,
                 Aggregate* parent,
                 const QString& name,
-                Genus genus) : Aggregate(type, parent, name), seen_(false)
+                Genus genus)
+     : Aggregate(type, parent, name), seen_(false), noAutoList_(false)
     {
         setPageType(Node::OverviewPage);
         setGenus(genus);
@@ -1115,7 +1118,7 @@ class CollectionNode : public Aggregate
     virtual bool hasNamespaces() const Q_DECL_OVERRIDE;
     virtual bool hasClasses() const Q_DECL_OVERRIDE;
     virtual void getMemberNamespaces(NodeMap& out) Q_DECL_OVERRIDE;
-    virtual void getMemberClasses(NodeMap& out) Q_DECL_OVERRIDE;
+    virtual void getMemberClasses(NodeMap& out) const Q_DECL_OVERRIDE;
     virtual bool wasSeen() const Q_DECL_OVERRIDE { return seen_; }
     virtual QString title() const Q_DECL_OVERRIDE { return title_; }
     virtual QString subTitle() const Q_DECL_OVERRIDE { return subtitle_; }
@@ -1139,9 +1142,12 @@ class CollectionNode : public Aggregate
 
     void markSeen() { seen_ = true; }
     void markNotSeen() { seen_ = false; }
+    bool noAutoList() const { return noAutoList_; }
+    virtual void setNoAutoList(bool b)  Q_DECL_OVERRIDE { noAutoList_ = b; }
 
  private:
     bool        seen_;
+    bool        noAutoList_;
     QString     title_;
     QString     subtitle_;
     NodeList    members_;

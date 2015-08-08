@@ -672,9 +672,9 @@ void QProcessPrivate::execChild(const char *workingDir, char **path, char **argv
     qt_safe_close(childStartedPipe[0]);
 
     // enter the working directory
-    if (workingDir) {
-        if (QT_CHDIR(workingDir) == -1)
-            qWarning("QProcessPrivate::execChild() failed to chdir to %s", workingDir);
+    if (workingDir && QT_CHDIR(workingDir) == -1) {
+        // failed, stop the process
+        goto report_errno;
     }
 
     // this is a virtual call, and it base behavior is to do nothing.
@@ -703,6 +703,7 @@ void QProcessPrivate::execChild(const char *workingDir, char **path, char **argv
     }
 
     // notify failure
+report_errno:
     QString error = qt_error_string(errno);
 #if defined (QPROCESS_DEBUG)
     fprintf(stderr, "QProcessPrivate::execChild() failed (%s), notifying parent process\n", qPrintable(error));
@@ -1075,20 +1076,17 @@ bool QProcessPrivate::waitForDeadChild()
         return true; // child has already exited
 
     // read the process information from our fd
-    siginfo_t info;
-    qint64 ret = qt_safe_read(forkfd, &info, sizeof info);
-    Q_ASSERT(ret == sizeof info);
-    Q_UNUSED(ret);
+    forkfd_info info;
+    int ret;
+    EINTR_LOOP(ret, forkfd_wait(forkfd, &info, Q_NULLPTR));
 
-    Q_ASSERT(info.si_pid == pid_t(pid));
-
-    exitCode = info.si_status;
-    crashed = info.si_code != CLD_EXITED;
+    exitCode = info.status;
+    crashed = info.code != CLD_EXITED;
 
     delete deathNotifier;
     deathNotifier = 0;
 
-    qt_safe_close(forkfd);
+    EINTR_LOOP(ret, forkfd_close(forkfd));
     forkfd = -1; // Child is dead, don't try to kill it anymore
 
 #if defined QPROCESS_DEBUG

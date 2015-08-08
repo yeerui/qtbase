@@ -996,6 +996,34 @@ void QPdfEngine::drawTextItem(const QPointF &p, const QTextItem &textItem)
     *d->currentPage << "Q\n";
 }
 
+void QPdfEngine::drawHyperlink(const QRectF &r, const QUrl &url)
+{
+    Q_D(QPdfEngine);
+
+    const uint annot = d->addXrefEntry(-1);
+    const QByteArray urlascii = url.toEncoded();
+    int len = urlascii.size();
+    QVarLengthArray<char> url_esc(0);
+    for (int j = 0; j < len; j++) {
+        if (urlascii[j] == '(' || urlascii[j] == ')' || urlascii[j] == '\\')
+            url_esc.append('\\');
+        url_esc.append(urlascii[j]);
+    }
+    url_esc.append('\0');
+
+    char buf[256];
+    const QRectF rr = d->pageMatrix().mapRect(r);
+    d->xprintf("<<\n/Type /Annot\n/Subtype /Link\n/Rect [");
+    d->xprintf("%s ", qt_real_to_string(rr.left(), buf));
+    d->xprintf("%s ", qt_real_to_string(rr.top(), buf));
+    d->xprintf("%s ", qt_real_to_string(rr.right(), buf));
+    d->xprintf("%s", qt_real_to_string(rr.bottom(), buf));
+    d->xprintf("]\n/Border [0 0 0]\n/A <<\n");
+    d->xprintf("/Type /Action\n/S /URI\n/URI (%s)\n", url_esc.constData());
+    d->xprintf(">>\n>>\n");
+    d->xprintf("endobj\n");
+    d->currentPage->annotations.append(annot);
+}
 
 void QPdfEngine::updateState(const QPaintEngineState &state)
 {
@@ -1317,6 +1345,9 @@ int QPdfEngine::metric(QPaintDevice::PaintDeviceMetric metricType) const
         break;
     case QPaintDevice::PdmDevicePixelRatio:
         val = 1;
+        break;
+    case QPaintDevice::PdmDevicePixelRatioScaled:
+        val = 1 * QPaintDevice::devicePixelRatioFScale();
         break;
     default:
         qWarning("QPdfWriter::metric: Invalid metric command");
@@ -2100,9 +2131,9 @@ int QPdfEnginePrivate::generateLinearGradientShader(const QLinearGradient *gradi
 int QPdfEnginePrivate::generateRadialGradientShader(const QRadialGradient *gradient, const QTransform &matrix, bool alpha)
 {
     QPointF p1 = gradient->center();
-    double r1 = gradient->centerRadius();
+    qreal r1 = gradient->centerRadius();
     QPointF p0 = gradient->focalPoint();
-    double r0 = gradient->focalRadius();
+    qreal r0 = gradient->focalRadius();
 
     Q_ASSERT(gradient->coordinateMode() == QGradient::LogicalMode);
 

@@ -328,14 +328,8 @@ Q_GLOBAL_STATIC(QUrl, lastVisitedDir)
 */
 
 QT_BEGIN_INCLUDE_NAMESPACE
-#ifdef Q_DEAD_CODE_FROM_QT4_WIN
-#include <qwindowsstyle_p.h>
-#endif
 #include <QMetaEnum>
 #include <qshortcut.h>
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
-#include <qmacstyle_mac_p.h>
-#endif
 QT_END_INCLUDE_NAMESPACE
 
 /*!
@@ -1706,6 +1700,30 @@ void QFileDialog::setAcceptMode(QFileDialog::AcceptMode mode)
     d->retranslateWindowTitle();
 }
 
+/*!
+    \property QFileDialog::supportedSchemes
+    \brief the URL schemes that the file dialog should allow navigating to.
+    \since 5.6
+
+    Setting this property allows to restrict the type of URLs the
+    user will be able to select. It is a way for the application to declare
+    the protocols it will support to fetch the file content. An empty list
+    means that no restriction is applied (the default).
+    Supported for local files ("file" scheme) is implicit and always enabled;
+    it is not necessary to include it in the restriction.
+*/
+
+void QFileDialog::setSupportedSchemes(const QStringList &schemes)
+{
+    Q_D(QFileDialog);
+    d->options->setSupportedSchemes(schemes);
+}
+
+QStringList QFileDialog::supportedSchemes() const
+{
+    return d_func()->options->supportedSchemes();
+}
+
 /*
     Returns the file system model index that is the root index in the
     views
@@ -2102,8 +2120,8 @@ QString QFileDialog::getOpenFileName(QWidget *parent,
     user will be able to select. It is a way for the application to declare
     the protocols it will support to fetch the file content. An empty list
     means that no restriction is applied (the default).
-    Supported for local files ("file" scheme) is implicit and always enabled.
-    it is not necessary to include in the restriction.
+    Supported for local files ("file" scheme) is implicit and always enabled;
+    it is not necessary to include it in the restriction.
 
     When possible, this static function will use the native file dialog and
     not a QFileDialog. On platforms which don't support selecting remote
@@ -2120,8 +2138,6 @@ QUrl QFileDialog::getOpenFileUrl(QWidget *parent,
                                  Options options,
                                  const QStringList &supportedSchemes)
 {
-    Q_UNUSED(supportedSchemes); // TODO
-
     QFileDialogArgs args;
     args.parent = parent;
     args.caption = caption;
@@ -2132,6 +2148,7 @@ QUrl QFileDialog::getOpenFileUrl(QWidget *parent,
     args.options = options;
 
     QFileDialog dialog(args);
+    dialog.setSupportedSchemes(supportedSchemes);
     if (selectedFilter && !selectedFilter->isEmpty())
         dialog.selectNameFilter(*selectedFilter);
     if (dialog.exec() == QDialog::Accepted) {
@@ -2180,11 +2197,6 @@ QUrl QFileDialog::getOpenFileUrl(QWidget *parent,
     see the QFileDialog::Option enum for more information on the flags you can
     pass.
 
-    \note If you want to iterate over the list of files, you should iterate
-    over a copy. For example:
-
-    \snippet code/src_gui_dialogs_qfiledialog.cpp 10
-
     \warning Do not delete \a parent during the execution of the dialog. If you
     want to do this, you should create the dialog yourself using one of the
     QFileDialog constructors.
@@ -2225,8 +2237,8 @@ QStringList QFileDialog::getOpenFileNames(QWidget *parent,
     user will be able to select. It is a way for the application to declare
     the protocols it will support to fetch the file content. An empty list
     means that no restriction is applied (the default).
-    Supported for local files ("file" scheme) is implicit and always enabled.
-    it is not necessary to include in the restriction.
+    Supported for local files ("file" scheme) is implicit and always enabled;
+    it is not necessary to include it in the restriction.
 
     When possible, this static function will use the native file dialog and
     not a QFileDialog. On platforms which don't support selecting remote
@@ -2243,8 +2255,6 @@ QList<QUrl> QFileDialog::getOpenFileUrls(QWidget *parent,
                                          Options options,
                                          const QStringList &supportedSchemes)
 {
-    Q_UNUSED(supportedSchemes);
-
     QFileDialogArgs args;
     args.parent = parent;
     args.caption = caption;
@@ -2255,6 +2265,7 @@ QList<QUrl> QFileDialog::getOpenFileUrls(QWidget *parent,
     args.options = options;
 
     QFileDialog dialog(args);
+    dialog.setSupportedSchemes(supportedSchemes);
     if (selectedFilter && !selectedFilter->isEmpty())
         dialog.selectNameFilter(*selectedFilter);
     if (dialog.exec() == QDialog::Accepted) {
@@ -2344,8 +2355,8 @@ QString QFileDialog::getSaveFileName(QWidget *parent,
     user will be able to select. It is a way for the application to declare
     the protocols it will support to save the file content. An empty list
     means that no restriction is applied (the default).
-    Supported for local files ("file" scheme) is implicit and always enabled.
-    it is not necessary to include in the restriction.
+    Supported for local files ("file" scheme) is implicit and always enabled;
+    it is not necessary to include it in the restriction.
 
     When possible, this static function will use the native file dialog and
     not a QFileDialog. On platforms which don't support selecting remote
@@ -2362,8 +2373,6 @@ QUrl QFileDialog::getSaveFileUrl(QWidget *parent,
                                  Options options,
                                  const QStringList &supportedSchemes)
 {
-    Q_UNUSED(supportedSchemes);
-
     QFileDialogArgs args;
     args.parent = parent;
     args.caption = caption;
@@ -2374,6 +2383,7 @@ QUrl QFileDialog::getSaveFileUrl(QWidget *parent,
     args.options = options;
 
     QFileDialog dialog(args);
+    dialog.setSupportedSchemes(supportedSchemes);
     dialog.setAcceptMode(AcceptSave);
     if (selectedFilter && !selectedFilter->isEmpty())
         dialog.selectNameFilter(*selectedFilter);
@@ -2451,8 +2461,8 @@ QString QFileDialog::getExistingDirectory(QWidget *parent,
     user will be able to select. It is a way for the application to declare
     the protocols it will support to fetch the file content. An empty list
     means that no restriction is applied (the default).
-    Supported for local files ("file" scheme) is implicit and always enabled.
-    it is not necessary to include in the restriction.
+    Supported for local files ("file" scheme) is implicit and always enabled;
+    it is not necessary to include it in the restriction.
 
     When possible, this static function will use the native file dialog and
     not a QFileDialog. On platforms which don't support selecting remote
@@ -2467,8 +2477,6 @@ QUrl QFileDialog::getExistingDirectoryUrl(QWidget *parent,
                                           Options options,
                                           const QStringList &supportedSchemes)
 {
-    Q_UNUSED(supportedSchemes);
-
     QFileDialogArgs args;
     args.parent = parent;
     args.caption = caption;
@@ -2477,6 +2485,7 @@ QUrl QFileDialog::getExistingDirectoryUrl(QWidget *parent,
     args.options = options;
 
     QFileDialog dialog(args);
+    dialog.setSupportedSchemes(supportedSchemes);
     if (dialog.exec() == QDialog::Accepted)
         return dialog.selectedUrls().value(0);
     return QUrl();
@@ -2972,7 +2981,7 @@ void QFileDialogPrivate::createWidgets()
     q->setHistory(options->history());
     if (options->initiallySelectedFiles().count() == 1)
         q->selectFile(options->initiallySelectedFiles().first().fileName());
-    foreach (QUrl url, options->initiallySelectedFiles())
+    foreach (const QUrl &url, options->initiallySelectedFiles())
         q->selectUrl(url);
     lineEdit()->selectAll();
     _q_updateOkButton();

@@ -249,7 +249,7 @@ public:
 #ifdef Q_COMPILER_RVALUE_REFS
     QHash(QHash &&other) Q_DECL_NOTHROW : d(other.d) { other.d = const_cast<QHashData *>(&QHashData::shared_null); }
     QHash &operator=(QHash &&other) Q_DECL_NOTHROW
-    { qSwap(d, other.d); return *this; }
+    { QHash moved(std::move(other)); swap(moved); return *this; }
 #endif
     void swap(QHash &other) Q_DECL_NOTHROW { qSwap(d, other.d); }
 
@@ -413,6 +413,31 @@ public:
     };
     friend class const_iterator;
 
+    class key_iterator
+    {
+        const_iterator i;
+
+    public:
+        typedef typename const_iterator::iterator_category iterator_category;
+        typedef typename const_iterator::difference_type difference_type;
+        typedef Key value_type;
+        typedef const Key *pointer;
+        typedef const Key &reference;
+
+        explicit key_iterator(const_iterator o) : i(o) { }
+
+        const Key &operator*() const { return i.key(); }
+        const Key *operator->() const { return &i.key(); }
+        bool operator==(key_iterator o) const { return i == o.i; }
+        bool operator!=(key_iterator o) const { return i != o.i; }
+
+        inline key_iterator &operator++() { ++i; return *this; }
+        inline key_iterator operator++(int) { return key_iterator(i++);}
+        inline key_iterator &operator--() { --i; return *this; }
+        inline key_iterator operator--(int) { return key_iterator(i--); }
+        const_iterator base() const { return i; }
+    };
+
     // STL style
     inline iterator begin() { detach(); return iterator(d->firstNode()); }
     inline const_iterator begin() const { return const_iterator(d->firstNode()); }
@@ -422,6 +447,9 @@ public:
     inline const_iterator end() const { return const_iterator(e); }
     inline const_iterator cend() const { return const_iterator(e); }
     inline const_iterator constEnd() const { return const_iterator(e); }
+    inline key_iterator keyBegin() const { return key_iterator(begin()); }
+    inline key_iterator keyEnd() const { return key_iterator(end()); }
+
     iterator erase(iterator it);
 
     // more Qt
@@ -916,6 +944,9 @@ public:
             insert(it->first, it->second);
     }
 #endif
+    // compiler-generated copy/move ctors/assignment operators are fine!
+    // compiler-generated destructor is fine!
+
     QMultiHash(const QHash<Key, T> &other) : QHash<Key, T>(other) {}
     void swap(QMultiHash &other) { QHash<Key, T>::swap(other); } // prevent QMultiHash<->QHash swaps
 
